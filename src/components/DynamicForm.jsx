@@ -29,12 +29,36 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
   schema.forEach((field) => {
     let fieldSchema = z.any();
     
-    if (field.type === "text" || field.type === "textarea" || field.type === "email") {
-      fieldSchema = z.string();
-      if (field.required) fieldSchema = fieldSchema.min(1, `${field.label} is required`);
-      if (field.type === "email") fieldSchema = fieldSchema.email("Invalid email address");
+    if (field.type === "text" || field.type === "textarea" || field.type === "email" || field.type === "date" || field.type === "select") {
+      fieldSchema = z.string({ required_error: `${field.label} is required` });
+      if (field.required) {
+        fieldSchema = fieldSchema.min(1, `${field.label} is required`);
+      } else {
+        fieldSchema = fieldSchema.optional();
+      }
+      if (field.type === "email") {
+        if (field.required) {
+          fieldSchema = fieldSchema.email("Invalid email address");
+        } else {
+          fieldSchema = fieldSchema.refine((val) => val === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), "Invalid email address");
+        }
+      }
     } else if (field.type === "number") {
-      fieldSchema = z.number();
+      fieldSchema = z.preprocess(
+        (val) => {
+          if (val === "" || val === null || val === undefined) return undefined;
+          const num = Number(val);
+          return isNaN(num) ? val : num;
+        },
+        field.required
+          ? z.number({ 
+              required_error: `${field.label} is required`,
+              invalid_type_error: `${field.label} must be a number` 
+            })
+          : z.number({ 
+              invalid_type_error: `${field.label} must be a number` 
+            }).optional()
+      );
     } else if (field.type === "file" || field.type === "image" || field.type === "pdf") {
       fieldSchema = z.any(); // Handled separately or as file object
       if (field.required) fieldSchema = fieldSchema.refine((val) => val && val.length > 0, `${field.label} is required`);
@@ -55,6 +79,7 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
       case "text":
       case "email":
       case "number":
+      case "date":
         return (
           <Input
             type={field.type}

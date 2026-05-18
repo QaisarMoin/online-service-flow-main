@@ -27,17 +27,31 @@ export default function ServiceApplication() {
   });
 
   const mutation = useMutation({
-    mutationFn: (formData) => api.post("/applications", {
-      serviceId: service._id,
-      formData,
-      amount: service.price,
-    }),
+    mutationFn: ({ formData, fileFields }) => {
+      // Build multipart/form-data with text fields as JSON + file binaries
+      const multipartData = new FormData();
+
+      // serviceId, amount as separate fields
+      multipartData.append("serviceId", service._id);
+      multipartData.append("amount", service.price);
+
+      // formData (text fields) as JSON string
+      multipartData.append("formData", JSON.stringify(formData));
+
+      // Append each file under the field name 'documents'
+      Object.entries(fileFields).forEach(([fieldName, fileList]) => {
+        Array.from(fileList).forEach((file) => {
+          multipartData.append("documents", file, file.name);
+        });
+      });
+
+      return api.postForm("/applications", multipartData);
+    },
     onSuccess: (data) => {
       toast({
-        title: "Payment Successful!",
-        description: "Your application has been submitted and payment verified.",
+        title: "Application Submitted!",
+        description: "Your application has been submitted successfully.",
       });
-      // Redirect to the ticket/success page with the new tracking ID
       navigate(`/success/${data._id}`);
     },
     onError: (error) => {
@@ -52,12 +66,8 @@ export default function ServiceApplication() {
   if (isLoading) return <div>Loading...</div>;
   if (error) return <div>Error loading service</div>;
 
-  const handleSubmit = (data) => {
-    // In a real app, this is where Razorpay integration would go.
-    // Simulating a payment verification delay of 1.5 seconds.
-    setTimeout(() => {
-      mutation.mutate(data);
-    }, 1500);
+  const handleSubmit = ({ formData, fileFields }) => {
+    mutation.mutate({ formData, fileFields });
   };
 
   return (
@@ -92,8 +102,8 @@ export default function ServiceApplication() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <DynamicForm 
-                    schema={service.formSchema} 
+                  <DynamicForm
+                    schema={service.formSchema}
                     onSubmit={handleSubmit}
                     isSubmitting={mutation.isPending}
                   />
@@ -128,7 +138,8 @@ export default function ServiceApplication() {
                 <CardContent className="text-sm space-y-2 text-yellow-700 dark:text-yellow-400">
                   <p>• Verify all details before submission.</p>
                   <p>• Uploaded documents must be clear and readable.</p>
-                  <p>• Payment is required to process the application.</p>
+                  <p>• Only images (JPG, PNG, WebP) and PDF files are accepted.</p>
+                  <p>• Maximum file size: 10MB per file.</p>
                 </CardContent>
               </Card>
             </div>

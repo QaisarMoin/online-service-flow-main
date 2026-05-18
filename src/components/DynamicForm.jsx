@@ -28,8 +28,14 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
   const formSchemaObject = {};
   schema.forEach((field) => {
     let fieldSchema = z.any();
-    
-    if (field.type === "text" || field.type === "textarea" || field.type === "email" || field.type === "date" || field.type === "select") {
+
+    if (
+      field.type === "text" ||
+      field.type === "textarea" ||
+      field.type === "email" ||
+      field.type === "date" ||
+      field.type === "select"
+    ) {
       fieldSchema = z.string({ required_error: `${field.label} is required` });
       if (field.required) {
         fieldSchema = fieldSchema.min(1, `${field.label} is required`);
@@ -40,7 +46,10 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
         if (field.required) {
           fieldSchema = fieldSchema.email("Invalid email address");
         } else {
-          fieldSchema = fieldSchema.refine((val) => val === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val), "Invalid email address");
+          fieldSchema = fieldSchema.refine(
+            (val) => val === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(val),
+            "Invalid email address"
+          );
         }
       }
     } else if (field.type === "number") {
@@ -51,17 +60,27 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
           return isNaN(num) ? val : num;
         },
         field.required
-          ? z.number({ 
+          ? z.number({
               required_error: `${field.label} is required`,
-              invalid_type_error: `${field.label} must be a number` 
+              invalid_type_error: `${field.label} must be a number`,
             })
-          : z.number({ 
-              invalid_type_error: `${field.label} must be a number` 
-            }).optional()
+          : z
+              .number({
+                invalid_type_error: `${field.label} must be a number`,
+              })
+              .optional()
       );
-    } else if (field.type === "file" || field.type === "image" || field.type === "pdf") {
-      fieldSchema = z.any(); // Handled separately or as file object
-      if (field.required) fieldSchema = fieldSchema.refine((val) => val && val.length > 0, `${field.label} is required`);
+    } else if (
+      field.type === "file" ||
+      field.type === "image" ||
+      field.type === "pdf"
+    ) {
+      fieldSchema = z.any();
+      if (field.required)
+        fieldSchema = fieldSchema.refine(
+          (val) => val && val.length > 0,
+          `${field.label} is required`
+        );
     }
 
     formSchemaObject[field._id || field.label] = fieldSchema;
@@ -71,6 +90,40 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
     resolver: zodResolver(z.object(formSchemaObject)),
     defaultValues: {},
   });
+
+  // Build FormData from form values — separates text fields (as JSON) and file fields (as binary)
+  const buildFormData = (data) => {
+    const formDataObj = {};
+    const fileFields = {};
+
+    schema.forEach((field) => {
+      const fieldKey = field._id || field.label;
+      const value = data[fieldKey];
+
+      if (
+        field.type === "file" ||
+        field.type === "image" ||
+        field.type === "pdf"
+      ) {
+        if (value && value.length > 0) {
+          fileFields[fieldKey] = value;
+        }
+      } else {
+        if (value !== undefined && value !== "") {
+          formDataObj[fieldKey] = value;
+        }
+      }
+    });
+
+    return { formDataObj, fileFields };
+  };
+
+  const handleSubmit = (data) => {
+    const { formDataObj, fileFields } = buildFormData(data);
+
+    // Pass structured data to parent — parent will build the final FormData or plain object
+    onSubmit({ formData: formDataObj, fileFields });
+  };
 
   const renderField = (field) => {
     const fieldName = field._id || field.label;
@@ -115,7 +168,13 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
         return (
           <Input
             type="file"
-            accept={field.type === "pdf" ? ".pdf" : field.type === "image" ? "image/*" : "*"}
+            accept={
+              field.type === "pdf"
+                ? ".pdf,application/pdf"
+                : field.type === "image"
+                ? "image/*"
+                : "image/*,.pdf"
+            }
             onChange={(e) => form.setValue(fieldName, e.target.files)}
           />
         );
@@ -126,26 +185,28 @@ export function DynamicForm({ schema, onSubmit, isSubmitting }) {
 
   return (
     <Form {...form}>
-      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-        {schema.sort((a, b) => a.order - b.order).map((field) => (
-          <FormField
-            key={field._id || field.label}
-            control={form.control}
-            name={field._id || field.label}
-            render={({ field: formField }) => (
-              <FormItem>
-                <FormLabel>{field.label} {field.required && "*"}</FormLabel>
-                <FormControl>
-                  {renderField(field)}
-                </FormControl>
-                {field.description && (
-                  <FormDescription>{field.description}</FormDescription>
-                )}
-                <FormMessage />
-              </FormItem>
-            )}
-          />
-        ))}
+      <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-6">
+        {schema
+          .sort((a, b) => a.order - b.order)
+          .map((field) => (
+            <FormField
+              key={field._id || field.label}
+              control={form.control}
+              name={field._id || field.label}
+              render={({ field: formField }) => (
+                <FormItem>
+                  <FormLabel>
+                    {field.label} {field.required && "*"}
+                  </FormLabel>
+                  <FormControl>{renderField(field)}</FormControl>
+                  {field.description && (
+                    <FormDescription>{field.description}</FormDescription>
+                  )}
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          ))}
         <Button type="submit" className="w-full" disabled={isSubmitting}>
           {isSubmitting ? "Submitting..." : "Submit Application"}
         </Button>

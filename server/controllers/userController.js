@@ -1,5 +1,6 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import asyncHandler from '../middleware/asyncHandler.js';
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
@@ -10,7 +11,7 @@ const generateToken = (id) => {
 // @desc    Auth user & get token
 // @route   POST /api/users/login
 // @access  Public
-const authUser = async (req, res) => {
+const authUser = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
   const user = await User.findOne({ email });
@@ -28,12 +29,12 @@ const authUser = async (req, res) => {
     res.status(401);
     throw new Error('Invalid email or password');
   }
-};
+});
 
 // @desc    Register a new user
 // @route   POST /api/users
 // @access  Public
-const registerUser = async (req, res) => {
+const registerUser = asyncHandler(async (req, res) => {
   const { name, email, password, role, tenantId } = req.body;
 
   const userExists = await User.findOne({ email });
@@ -64,6 +65,7 @@ const registerUser = async (req, res) => {
     res.status(400);
     throw new Error('Invalid user data');
   }
-};
+});
 
 export { authUser, registerUser };
+

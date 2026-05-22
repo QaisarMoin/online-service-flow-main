@@ -34,6 +34,9 @@ export default function ServiceApplication() {
       // serviceId, amount as separate fields
       multipartData.append("serviceId", service._id);
       multipartData.append("amount", service.price);
+      if (service.tenant) {
+        multipartData.append("tenantId", service.tenant);
+      }
 
       // formData (text fields) as JSON string
       multipartData.append("formData", JSON.stringify(formData));

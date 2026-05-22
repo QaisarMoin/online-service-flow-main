@@ -5,7 +5,9 @@ import https from 'https';
 import http from 'http';
 import { URL } from 'url';
 import Request from '../models/Request.js';
+import Service from '../models/Service.js';
 import cloudinary from '../config/cloudinary.js';
+import asyncHandler from '../middleware/asyncHandler.js';
 
 // Helper: Upload a single local file to Cloudinary and delete local copy
 const uploadToCloudinaryAndClean = async (filePath, originalname, mimetype) => {
@@ -33,13 +35,29 @@ const uploadToCloudinaryAndClean = async (filePath, originalname, mimetype) => {
   };
 };
 
-// Helper: Download a file from a URL and return a readable stream
-const downloadFileFromUrl = (fileUrl) => {
+// Helper: Download a file from a URL and return a readable stream (handles redirects)
+const downloadFileFromUrl = (fileUrl, redirectCount = 0) => {
   return new Promise((resolve, reject) => {
+    if (redirectCount > 5) {
+      reject(new Error(`Too many redirects for ${fileUrl}`));
+      return;
+    }
     const parsedUrl = new URL(fileUrl);
     const protocol = parsedUrl.protocol === 'https:' ? https : http;
 
     protocol.get(fileUrl, (response) => {
+      // Handle HTTP redirects (301, 302, 307, 308)
+      if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        let redirectUrl = response.headers.location;
+        if (!redirectUrl.startsWith('http')) {
+          redirectUrl = new URL(redirectUrl, parsedUrl.origin).href;
+        }
+        downloadFileFromUrl(redirectUrl, redirectCount + 1)
+          .then(resolve)
+          .catch(reject);
+        return;
+      }
+
       if (response.statusCode !== 200) {
         reject(new Error(`Failed to fetch file: HTTP ${response.statusCode} for ${fileUrl}`));
         return;
@@ -52,7 +70,7 @@ const downloadFileFromUrl = (fileUrl) => {
 // @desc    Create new service request (with file uploads to Cloudinary)
 // @route   POST /api/applications
 // @access  Private
-const createApplication = async (req, res) => {
+const createApplication = asyncHandler(async (req, res) => {
   try {
     const { serviceId, amount, tenantId } = req.body;
 
@@ -69,6 +87,12 @@ const createApplication = async (req, res) => {
     if (!serviceId || !formData) {
       res.status(400);
       throw new Error('Please provide all required fields');
+    }
+
+    const service = await Service.findById(serviceId);
+    if (!service) {
+      res.status(404);
+      throw new Error('Service not found');
     }
 
     // Upload each file to Cloudinary and collect document info
@@ -102,7 +126,7 @@ const createApplication = async (req, res) => {
     const request = await Request.create({
       service: serviceId,
       customer: req.user._id,
-      tenant: tenantId || req.user.tenant,
+      tenant: service.tenant || tenantId || req.user.tenant,
       formData,
       documents,
       amount: amount || 0,
@@ -126,12 +150,12 @@ const createApplication = async (req, res) => {
     }
     throw err;
   }
-};
+});
 
 // @desc    Get all requests (Admin) or user's requests
 // @route   GET /api/applications
 // @access  Private
-const getApplications = async (req, res) => {
+const getApplications = asyncHandler(async (req, res) => {
   let filter = {};
 
   if (req.user.role === 'customer') {
@@ -147,12 +171,12 @@ const getApplications = async (req, res) => {
     .sort('-createdAt');
 
   res.json(requests);
-};
+});
 
 // @desc    Update request status
 // @route   PATCH /api/applications/:id
 // @access  Private/Admin
-const updateApplicationStatus = async (req, res) => {
+const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { status, remarks } = req.body;
   const request = await Request.findById(req.params.id);
 
@@ -166,13 +190,13 @@ const updateApplicationStatus = async (req, res) => {
     res.status(404);
     throw new Error('Request not found');
   }
-};
+});
 
 // @desc    Download all documents for a request as ZIP (fetched from Cloudinary)
 // @route   GET /api/applications/:id/download-zip
 // @access  Private/Admin
-const downloadRequestZip = async (req, res) => {
-  const request = await Request.findById(req.params.id);
+const downloadRequestZip = asyncHandler(async (req, res) => {
+  const request = await Request.findById(req.params.id).populate('customer', 'name');
 
   if (!request) {
     res.status(404);
@@ -184,12 +208,14 @@ const downloadRequestZip = async (req, res) => {
     throw new Error('No documents found for this request');
   }
 
+  const userName = request.customer ? request.customer.name.trim().replace(/\s+/g, '_') : `request-${request._id}`;
+
   const archive = archiver('zip', {
     zlib: { level: 9 },
   });
 
   res.setHeader('Content-Type', 'application/zip');
-  res.setHeader('Content-Disposition', `attachment; filename="request-${request._id}.zip"`);
+  res.setHeader('Content-Disposition', `attachment; filename="${userName}.zip"; filename*=UTF-8''${encodeURIComponent(userName)}.zip`);
 
   archive.on('error', (err) => {
     console.error('Archive error:', err);
@@ -214,6 +240,7 @@ const downloadRequestZip = async (req, res) => {
   }
 
   await archive.finalize();
-};
+});
 
 export { createApplication, getApplications, updateApplicationStatus, downloadRequestZip };
+

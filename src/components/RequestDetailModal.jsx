@@ -1,6 +1,5 @@
 import { Badge } from "@/components/ui/badge";
 import { StatusBadge } from "@/components/StatusBadge";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { FileText, ImageIcon, ExternalLink, Download } from "lucide-react";
 
 // Helper: detect if a document is an image based on mime type or URL
@@ -136,7 +135,7 @@ export function RequestDetailModal({ request, isOpen, onClose }) {
           </button>
         </div>
 
-        <ScrollArea className="flex-1 p-6">
+        <div className="flex-1 overflow-y-auto p-6 min-h-0">
           <div className="space-y-6">
             {/* Customer + Status */}
             <div className="grid grid-cols-2 gap-4">
@@ -195,7 +194,7 @@ export function RequestDetailModal({ request, isOpen, onClose }) {
               </div>
             )}
           </div>
-        </ScrollArea>
+        </div>
 
         {/* Footer */}
         <div className="p-6 border-t flex justify-end">

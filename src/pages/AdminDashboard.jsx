@@ -103,7 +103,7 @@ export default function AdminDashboard() {
   const handleDownloadZip = (id) => {
     // Open the download link in a new tab
     const token = localStorage.getItem('token');
-    window.open(`http://localhost:5001/api/applications/${id}/download-zip?token=${token}`, '_blank');
+    window.open(`https://online-service-flow-main.onrender.com/api/applications/${id}/download-zip?token=${token}`, '_blank');
   };
 
   if (isLoadingRequests || isLoadingServices) return <div className="p-8 text-center">Loading dashboard data...</div>;

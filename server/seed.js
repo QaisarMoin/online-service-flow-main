@@ -63,6 +63,7 @@ const seedData = async () => {
   } catch (error) {
     console.error(`Error with seeding: ${error.message}`);
     process.exit(1);
+    //vbds
   }
 };
 

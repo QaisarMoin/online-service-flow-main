@@ -7,7 +7,9 @@ const fieldSchema = new mongoose.Schema({
     required: true,
   },
   label: { type: String, required: true },
+  labelHindi: String,
   placeholder: String,
+  placeholderHindi: String,
   required: { type: Boolean, default: false },
   options: [String], // For select, radio, checkbox
   validation: {
@@ -23,11 +25,14 @@ const serviceSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  titleHindi: String,
   description: String,
+  descriptionHindi: String,
   category: {
     type: String,
     required: true,
   },
+  categoryHindi: String,
   price: {
     type: Number,
     required: true,
@@ -41,7 +46,9 @@ const serviceSchema = new mongoose.Schema({
   },
   formSchema: [fieldSchema],
   instructions: [String],
+  instructionsHindi: [String],
   requiredDocuments: [String], // General documents needed
+  requiredDocumentsHindi: [String],
   image: String,
   isPopular: {
     type: Boolean,

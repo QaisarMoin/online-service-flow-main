@@ -13,45 +13,63 @@ export default function ApplicationSuccess() {
   };
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-b from-emerald-50/20 via-background to-background dark:from-slate-950 dark:via-background dark:to-background flex flex-col justify-between">
       <Header />
-      <div className="container mx-auto px-4 py-16 flex justify-center items-center">
-        <Card className="max-w-md w-full text-center border-success/20 shadow-lg print:shadow-none print:border-none print:max-w-full">
+      
+      <div className="flex-1 flex justify-center items-center px-4 py-16 relative">
+        {/* Glow Blobs */}
+        <div className="absolute top-[20%] left-[20%] w-[350px] h-[350px] bg-emerald-500/5 rounded-full blur-[80px] pointer-events-none" />
+        
+        <Card className="max-w-md w-full text-center bg-card/90 backdrop-blur-md border border-border/50 rounded-2xl shadow-[0_15px_40px_-15px_rgba(0,0,0,0.06)] relative z-10 print:shadow-none print:border-none print:max-w-full">
           <CardHeader className="space-y-4 pt-8">
             <div className="flex justify-center">
-              <div className="w-20 h-20 bg-success/10 rounded-full flex items-center justify-center">
-                <CheckCircle className="w-12 h-12 text-success" />
+              <div className="w-20 h-20 bg-emerald-50 dark:bg-emerald-950/40 rounded-full flex items-center justify-center shadow-[0_4px_14px_-2px_rgba(16,185,129,0.2)]">
+                <CheckCircle className="w-12 h-12 text-emerald-500" />
               </div>
             </div>
-            <CardTitle className="text-3xl text-success font-bold">Payment Successful!</CardTitle>
-            <CardDescription className="text-lg">
-              Your application has been received.
+            <CardTitle className="text-2xl text-emerald-500 font-extrabold tracking-tight">Payment Successful!</CardTitle>
+            <CardDescription className="text-sm font-medium text-muted-foreground leading-normal">
+              Your application has been received and is now processing.
             </CardDescription>
           </CardHeader>
           
           <CardContent className="space-y-6">
-            <div className="bg-accent p-6 rounded-xl border border-border/50">
-              <p className="text-sm text-muted-foreground mb-2 uppercase tracking-wider font-semibold">Your Tracking Token</p>
-              <div className="text-2xl font-mono font-bold tracking-widest text-primary break-all bg-background py-3 px-4 rounded-lg shadow-inner">
+            <div className="bg-secondary/40 dark:bg-secondary/15 p-6 rounded-2xl border border-border/40">
+              <p className="text-[10px] text-muted-foreground mb-2 uppercase tracking-widest font-extrabold">Your Tracking Token</p>
+              <div className="text-xl font-mono font-bold tracking-widest text-primary break-all bg-card py-3 px-4 rounded-xl border border-border/50 shadow-sm selection:bg-primary/20">
                 {applicationId}
               </div>
-              <p className="text-xs text-muted-foreground mt-4">
-                Please save this token. You can use it to track your application status.
+              <p className="text-xs text-muted-foreground/80 mt-4 leading-normal font-medium">
+                Please save this token. Use it to track progress on your dashboard.
               </p>
             </div>
           </CardContent>
 
           <CardFooter className="flex flex-col gap-3 pb-8 print:hidden">
-            <Button onClick={handlePrint} className="w-full bg-primary" size="lg">
+            <Button 
+              onClick={handlePrint} 
+              className="w-full bg-primary hover:bg-primary-hover text-white shadow-md hover:shadow-lg rounded-xl h-11 transition-all duration-200 font-semibold text-xs" 
+              size="lg"
+            >
               <Printer className="w-4 h-4 mr-2" />
-              Print / Save as PDF
+              Print / Save Receipt PDF
             </Button>
-            <Button onClick={() => navigate("/")} variant="outline" className="w-full" size="lg">
+            <Button 
+              onClick={() => navigate("/")} 
+              variant="outline" 
+              className="w-full border-border/80 hover:bg-secondary rounded-xl h-11 transition-all duration-200 text-xs font-semibold text-muted-foreground hover:text-foreground" 
+              size="lg"
+            >
               <ArrowRight className="w-4 h-4 mr-2" />
               Back to Home
             </Button>
           </CardFooter>
         </Card>
+      </div>
+
+      {/* Footer copyright spacer */}
+      <div className="py-4 text-center text-[10px] text-muted-foreground border-t border-border/10 bg-card/10 backdrop-blur-sm print:hidden">
+        &copy; {new Date().getFullYear()} MP Online Hub. All rights reserved.
       </div>
 
       <style>{`

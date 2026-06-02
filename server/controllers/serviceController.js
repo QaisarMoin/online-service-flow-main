@@ -41,13 +41,18 @@ const createService = async (req, res) => {
   try {
     const {
       title,
+      titleHindi,
       description,
+      descriptionHindi,
       category,
+      categoryHindi,
       price,
       estimatedTime,
       formSchema,
       instructions,
+      instructionsHindi,
       requiredDocuments,
+      requiredDocumentsHindi,
       image,
       isPopular,
       tenantId
@@ -55,13 +60,18 @@ const createService = async (req, res) => {
 
     const service = new Service({
       title,
+      titleHindi,
       description,
+      descriptionHindi,
       category,
+      categoryHindi,
       price,
       estimatedTime,
       formSchema,
       instructions,
+      instructionsHindi,
       requiredDocuments,
+      requiredDocumentsHindi,
       image,
       isPopular,
       tenant: tenantId || req.user.tenant,
@@ -83,13 +93,18 @@ const updateService = async (req, res) => {
 
     if (service) {
       service.title = req.body.title || service.title;
+      service.titleHindi = req.body.titleHindi !== undefined ? req.body.titleHindi : service.titleHindi;
       service.description = req.body.description || service.description;
+      service.descriptionHindi = req.body.descriptionHindi !== undefined ? req.body.descriptionHindi : service.descriptionHindi;
       service.category = req.body.category || service.category;
+      service.categoryHindi = req.body.categoryHindi !== undefined ? req.body.categoryHindi : service.categoryHindi;
       service.price = req.body.price || service.price;
       service.estimatedTime = req.body.estimatedTime || service.estimatedTime;
       service.formSchema = req.body.formSchema || service.formSchema;
       service.instructions = req.body.instructions || service.instructions;
+      service.instructionsHindi = req.body.instructionsHindi !== undefined ? req.body.instructionsHindi : service.instructionsHindi;
       service.requiredDocuments = req.body.requiredDocuments || service.requiredDocuments;
+      service.requiredDocumentsHindi = req.body.requiredDocumentsHindi !== undefined ? req.body.requiredDocumentsHindi : service.requiredDocumentsHindi;
       service.image = req.body.image || service.image;
       service.isPopular = req.body.isPopular !== undefined ? req.body.isPopular : service.isPopular;
       service.isActive = req.body.isActive !== undefined ? req.body.isActive : service.isActive;

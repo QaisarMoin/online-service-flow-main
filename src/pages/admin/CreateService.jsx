@@ -19,34 +19,50 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Plus, Trash2, GripVertical, Save, Languages } from "lucide-react";
+import { Plus, Trash2, GripVertical, Save, Languages, Loader2 } from "lucide-react";
 import { Header } from "@/components/Header";
 import { useToast } from "@/hooks/use-toast";
-
 import { api } from "@/lib/api";
 
+// ── Google Translate (free) ──────────────────────────────────────────────────
 const translateToHindi = async (text) => {
   if (!text || !text.trim()) return "";
   try {
-    const response = await fetch(
+    const res = await fetch(
       `https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=hi&dt=t&q=${encodeURIComponent(text)}`
     );
-    const data = await response.json();
-    if (data && data[0]) {
-      return data[0].map(x => x[0]).join("").trim();
-    }
-    return "";
-  } catch (error) {
-    console.error("Translation error:", error);
+    const data = await res.json();
+    return data?.[0]?.map((x) => x[0]).join("").trim() ?? "";
+  } catch {
     return "";
   }
 };
 
+// ── Column header badge ──────────────────────────────────────────────────────
+function LangHeader({ lang }) {
+  const isEn = lang === "en";
+  return (
+    <div
+      className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-[11px] font-extrabold tracking-wide w-fit ${
+        isEn
+          ? "bg-blue-50 text-blue-600 border border-blue-200/60 dark:bg-blue-950/30 dark:text-blue-400 dark:border-blue-900/40"
+          : "bg-orange-50 text-orange-600 border border-orange-200/60 dark:bg-orange-950/30 dark:text-orange-400 dark:border-orange-900/40"
+      }`}
+    >
+      {isEn ? "🇬🇧 English" : "🇮🇳 हिन्दी"}
+    </div>
+  );
+}
+
+// ── Main Component ───────────────────────────────────────────────────────────
 export default function CreateService() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const { toast } = useToast();
 
-  // Authentication check
+  const [isSaving, setIsSaving] = useState(false);
+  const [isTranslating, setIsTranslating] = useState(false);
+
   useEffect(() => {
     const user = JSON.parse(localStorage.getItem("user") || "{}");
     if (user.role !== "admin" && user.role !== "super_admin") {
@@ -54,240 +70,214 @@ export default function CreateService() {
     }
   }, [navigate]);
 
-  const { toast } = useToast();
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTranslating, setIsTranslating] = useState(false);
+  const [serviceInfo, setServiceInfo] = useState({
+    title: "",        titleHindi: "",
+    description: "",  descriptionHindi: "",
+    category: "",     categoryHindi: "",
+    price: "",        estimatedTime: "",
+    instructions: "", instructionsHindi: "",
+    requiredDocuments: "", requiredDocumentsHindi: "",
+  });
 
+  const [fields, setFields] = useState([
+    { type: "text", label: "Full Name", labelHindi: "पूरा नाम", placeholder: "", placeholderHindi: "", required: true, order: 0 },
+  ]);
+
+  // ── Auto-translate ────────────────────────────────────────────────────────
   const handleAutoTranslate = async () => {
-    if (!serviceInfo.title && !serviceInfo.category && !serviceInfo.description && fields.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "No Content",
-        description: "Please enter some English details to translate first.",
-      });
+    if (!serviceInfo.title && !serviceInfo.category && !serviceInfo.description) {
+      toast({ variant: "destructive", title: "No English content", description: "Fill in English fields first." });
       return;
     }
     setIsTranslating(true);
     try {
-      const translatedTitle = await translateToHindi(serviceInfo.title);
-      const translatedCategory = await translateToHindi(serviceInfo.category);
-      const translatedDescription = await translateToHindi(serviceInfo.description);
-      const translatedInstructions = await translateToHindi(serviceInfo.instructions);
-      const translatedRequiredDocs = await translateToHindi(serviceInfo.requiredDocuments);
+      const [tTitle, tCat, tDesc, tInstr, tDocs] = await Promise.all([
+        translateToHindi(serviceInfo.title),
+        translateToHindi(serviceInfo.category),
+        translateToHindi(serviceInfo.description),
+        translateToHindi(serviceInfo.instructions),
+        translateToHindi(serviceInfo.requiredDocuments),
+      ]);
 
-      setServiceInfo(prev => ({
+      setServiceInfo((prev) => ({
         ...prev,
-        titleHindi: translatedTitle || prev.titleHindi,
-        categoryHindi: translatedCategory || prev.categoryHindi,
-        descriptionHindi: translatedDescription || prev.descriptionHindi,
-        instructionsHindi: translatedInstructions || prev.instructionsHindi,
-        requiredDocumentsHindi: translatedRequiredDocs || prev.requiredDocumentsHindi,
+        titleHindi: tTitle || prev.titleHindi,
+        categoryHindi: tCat || prev.categoryHindi,
+        descriptionHindi: tDesc || prev.descriptionHindi,
+        instructionsHindi: tInstr || prev.instructionsHindi,
+        requiredDocumentsHindi: tDocs || prev.requiredDocumentsHindi,
       }));
 
-      // Translate all form schema fields
       const updatedFields = await Promise.all(
-        fields.map(async (field) => {
-          const labelHindi = await translateToHindi(field.label);
-          const placeholderHindi = field.placeholder ? await translateToHindi(field.placeholder) : "";
-          return {
-            ...field,
-            labelHindi: labelHindi || field.labelHindi,
-            placeholderHindi: placeholderHindi || field.placeholderHindi,
-          };
-        })
+        fields.map(async (f) => ({
+          ...f,
+          labelHindi: (await translateToHindi(f.label)) || f.labelHindi,
+          placeholderHindi: (f.placeholder ? await translateToHindi(f.placeholder) : "") || f.placeholderHindi,
+        }))
       );
       setFields(updatedFields);
 
-      toast({
-        title: "Translation Complete",
-        description: "All fields have been automatically translated to Hindi.",
-      });
-    } catch (err) {
-      toast({
-        variant: "destructive",
-        title: "Translation Failed",
-        description: "An error occurred while translating. Please try again.",
-      });
+      toast({ title: "Translation Complete ✓", description: "Hindi fields have been auto-filled. Review and edit as needed." });
+    } catch {
+      toast({ variant: "destructive", title: "Translation Failed", description: "Try again." });
     } finally {
       setIsTranslating(false);
     }
   };
 
-  const [serviceInfo, setServiceInfo] = useState({
-    title: "",
-    titleHindi: "",
-    description: "",
-    descriptionHindi: "",
-    category: "",
-    categoryHindi: "",
-    price: "",
-    estimatedTime: "",
-    instructions: "",
-    instructionsHindi: "",
-    requiredDocuments: "",
-    requiredDocumentsHindi: "",
-  });
-  const [fields, setFields] = useState([
-    { type: "text", label: "Full Name", labelHindi: "पूरा नाम", placeholder: "", placeholderHindi: "", required: true, order: 0 },
-  ]);
+  // ── Field helpers ─────────────────────────────────────────────────────────
+  const addField = () =>
+    setFields([...fields, { type: "text", label: `Field ${fields.length + 1}`, labelHindi: "", placeholder: "", placeholderHindi: "", required: false, order: fields.length }]);
 
-  const addField = () => {
-    setFields([
-      ...fields,
-      { type: "text", label: `Field ${fields.length + 1}`, labelHindi: "", placeholder: "", placeholderHindi: "", required: false, order: fields.length },
-    ]);
+  const removeField = (i) => setFields(fields.filter((_, idx) => idx !== i));
+
+  const updateField = (i, key, value) => {
+    const next = [...fields];
+    next[i][key] = value;
+    setFields(next);
   };
 
-  const removeField = (index) => {
-    setFields(fields.filter((_, i) => i !== index));
-  };
-
-  const updateField = (index, key, value) => {
-    const newFields = [...fields];
-    newFields[index][key] = value;
-    setFields(newFields);
-  };
-
+  // ── Save ──────────────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (!serviceInfo.title || !serviceInfo.price) {
-      toast({ variant: "destructive", title: "Error", description: "Title and Price are required" });
+      toast({ variant: "destructive", title: "Error", description: "Title and Price are required." });
       return;
     }
-
     setIsSaving(true);
     try {
       const payload = {
         ...serviceInfo,
-        instructions: serviceInfo.instructions ? serviceInfo.instructions.split('\n').filter(Boolean) : [],
-        instructionsHindi: serviceInfo.instructionsHindi ? serviceInfo.instructionsHindi.split('\n').filter(Boolean) : [],
-        requiredDocuments: serviceInfo.requiredDocuments ? serviceInfo.requiredDocuments.split('\n').filter(Boolean) : [],
-        requiredDocumentsHindi: serviceInfo.requiredDocumentsHindi ? serviceInfo.requiredDocumentsHindi.split('\n').filter(Boolean) : [],
-        formSchema: fields.map((f, i) => ({ ...f, order: i }))
+        instructions: serviceInfo.instructions ? serviceInfo.instructions.split("\n").filter(Boolean) : [],
+        instructionsHindi: serviceInfo.instructionsHindi ? serviceInfo.instructionsHindi.split("\n").filter(Boolean) : [],
+        requiredDocuments: serviceInfo.requiredDocuments ? serviceInfo.requiredDocuments.split("\n").filter(Boolean) : [],
+        requiredDocumentsHindi: serviceInfo.requiredDocumentsHindi ? serviceInfo.requiredDocumentsHindi.split("\n").filter(Boolean) : [],
+        formSchema: fields.map((f, i) => ({ ...f, order: i })),
       };
-
       await api.post("/services", payload);
-      
       queryClient.invalidateQueries(["services"]);
-
-      toast({
-        title: "Service Created",
-        description: "Your new service has been saved successfully.",
-      });
+      toast({ title: "Service Created", description: "Saved successfully." });
       navigate("/admin");
-    } catch (error) {
-      toast({
-        variant: "destructive",
-        title: "Failed to save",
-        description: error.message || "Please check if the backend is running.",
-      });
+    } catch (err) {
+      toast({ variant: "destructive", title: "Failed to save", description: err.message || "Check backend." });
     } finally {
       setIsSaving(false);
     }
   };
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-background">
       <Header isAdmin={true} />
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="flex justify-between items-center mb-8">
+
+        {/* Top bar */}
+        <div className="flex flex-wrap justify-between items-start gap-4 mb-8">
           <div>
             <h1 className="text-2xl sm:text-3xl font-extrabold text-foreground tracking-tight mb-1">Create New Service</h1>
-            <p className="text-xs sm:text-sm text-muted-foreground font-medium">Add a new digital offering to the services portal</p>
+            <p className="text-xs sm:text-sm text-muted-foreground font-medium">Fill both English and Hindi columns together</p>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <Button
               onClick={handleAutoTranslate}
               disabled={isTranslating || isSaving}
               variant="outline"
-              className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl h-11 px-5 transition-all duration-200 text-xs sm:text-sm font-bold flex items-center gap-2"
+              className="border-primary/20 text-primary hover:bg-primary/5 rounded-xl h-11 px-5 text-xs sm:text-sm font-bold gap-2 transition-all"
             >
-              <Languages className="w-4 h-4" />
-              {isTranslating ? "Translating..." : "Auto-Translate to Hindi"}
+              {isTranslating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Languages className="w-4 h-4" />}
+              {isTranslating ? "Translating…" : "Auto-Translate → हिन्दी"}
             </Button>
-            <Button 
-              onClick={handleSave} 
+            <Button
+              onClick={handleSave}
               disabled={isSaving || isTranslating}
-              className="bg-primary hover:bg-primary-hover text-white shadow-md hover:shadow-lg rounded-xl h-11 px-5 transition-all duration-200 text-xs sm:text-sm font-bold flex items-center gap-2"
+              className="bg-primary hover:bg-primary-hover text-white shadow-md hover:shadow-lg rounded-xl h-11 px-5 text-xs sm:text-sm font-bold gap-2 transition-all"
             >
               <Save className="w-4 h-4" />
-              {isSaving ? "Saving..." : "Save Service"}
+              {isSaving ? "Saving…" : "Save Service"}
             </Button>
           </div>
         </div>
 
+        {/* Main grid */}
         <div className="grid lg:grid-cols-12 gap-8 items-start">
-          {/* Service Basic Information (Col Span 7) */}
-          <div className="lg:col-span-7">
+
+          {/* ── Left: Basic Info ─────────────────────────────────────────── */}
+          <div className="lg:col-span-7 space-y-5">
             <Card className="rounded-2xl border-border/50 shadow-sm bg-card">
-              <CardHeader className="pb-3 border-b border-border/20">
+              <CardHeader className="pb-4 border-b border-border/20">
                 <CardTitle className="text-base font-bold">Service Basic Information</CardTitle>
-                <CardDescription className="text-xs">General details about the service</CardDescription>
+                <CardDescription className="text-xs">Fill each field in both languages simultaneously</CardDescription>
+
+                {/* Column headers */}
+                <div className="grid grid-cols-2 gap-4 mt-3">
+                  <LangHeader lang="en" />
+                  <LangHeader lang="hi" />
+                </div>
               </CardHeader>
-              <CardContent className="pt-6 space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Title (English)</Label>
-                    <Input 
+
+              <CardContent className="pt-5 space-y-5">
+
+                {/* Title */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground/80">Title</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
                       value={serviceInfo.title}
-                      onChange={(e) => setServiceInfo({...serviceInfo, title: e.target.value})}
-                      placeholder="e.g. Aadhaar Card Correction" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 h-10 text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, title: e.target.value })}
+                      placeholder="e.g. Aadhaar Card Correction"
+                      className="rounded-xl border-border/60 focus-visible:ring-blue-400/30 h-10 text-sm bg-card"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Title (Hindi)</Label>
-                    <Input 
+                    <Input
                       value={serviceInfo.titleHindi}
-                      onChange={(e) => setServiceInfo({...serviceInfo, titleHindi: e.target.value})}
-                      placeholder="जैसे आधार कार्ड सुधार" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 h-10 text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, titleHindi: e.target.value })}
+                      placeholder="जैसे आधार कार्ड सुधार"
+                      className="rounded-xl border-orange-200/60 focus-visible:ring-orange-400/30 h-10 text-sm bg-card"
+                      dir="auto"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Category (English)</Label>
-                    <Input 
+                {/* Category */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground/80">Category</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Input
                       value={serviceInfo.category}
-                      onChange={(e) => setServiceInfo({...serviceInfo, category: e.target.value})}
-                      placeholder="e.g. Identity Documents" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 h-10 text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, category: e.target.value })}
+                      placeholder="e.g. Identity Documents"
+                      className="rounded-xl border-border/60 focus-visible:ring-blue-400/30 h-10 text-sm bg-card"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Category (Hindi)</Label>
-                    <Input 
+                    <Input
                       value={serviceInfo.categoryHindi}
-                      onChange={(e) => setServiceInfo({...serviceInfo, categoryHindi: e.target.value})}
-                      placeholder="जैसे पहचान दस्तावेज" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 h-10 text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, categoryHindi: e.target.value })}
+                      placeholder="जैसे पहचान दस्तावेज"
+                      className="rounded-xl border-orange-200/60 focus-visible:ring-orange-400/30 h-10 text-sm bg-card"
+                      dir="auto"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Description (English)</Label>
-                    <Textarea 
+                {/* Description */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground/80">Description</Label>
+                  <div className="grid grid-cols-2 gap-4">
+                    <Textarea
                       value={serviceInfo.description}
-                      onChange={(e) => setServiceInfo({...serviceInfo, description: e.target.value})}
-                      placeholder="Brief description of the service" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, description: e.target.value })}
+                      placeholder="Brief description of the service"
+                      className="rounded-xl border-border/60 focus-visible:ring-blue-400/30 min-h-[90px] text-sm bg-card resize-none"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Description (Hindi)</Label>
-                    <Textarea 
+                    <Textarea
                       value={serviceInfo.descriptionHindi}
-                      onChange={(e) => setServiceInfo({...serviceInfo, descriptionHindi: e.target.value})}
-                      placeholder="सेवा का संक्षिप्त विवरण" 
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card"
+                      onChange={(e) => setServiceInfo({ ...serviceInfo, descriptionHindi: e.target.value })}
+                      placeholder="सेवा का संक्षिप्त विवरण"
+                      className="rounded-xl border-orange-200/60 focus-visible:ring-orange-400/30 min-h-[90px] text-sm bg-card resize-none"
+                      dir="auto"
                     />
                   </div>
                 </div>
 
-                <div className="grid md:grid-cols-2 gap-4">
+                {/* Price + Time — language-agnostic */}
+                <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-foreground/80">Price (₹)</Label>
                     <Input
@@ -301,7 +291,7 @@ export default function CreateService() {
                   <div className="space-y-1.5">
                     <Label className="text-xs font-bold text-foreground/80">Estimated Time</Label>
                     <Input
-                      placeholder="e.g. 2-3 Working Days"
+                      placeholder="e.g. 2–3 Working Days"
                       value={serviceInfo.estimatedTime}
                       onChange={(e) => setServiceInfo({ ...serviceInfo, estimatedTime: e.target.value })}
                       className="rounded-xl border-border/60 focus-visible:ring-primary/20 h-10 text-sm bg-card"
@@ -309,166 +299,181 @@ export default function CreateService() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Instructions (English) (One per line)</Label>
+                {/* Instructions */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground/80">
+                    Instructions <span className="font-normal text-muted-foreground">(one per line)</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-4">
                     <Textarea
-                      placeholder="e.g. Please verify spelling before submitting.&#10;Documents must be clear."
                       value={serviceInfo.instructions}
                       onChange={(e) => setServiceInfo({ ...serviceInfo, instructions: e.target.value })}
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card font-semibold text-xs leading-normal"
+                      placeholder={"e.g. Verify spelling before submitting.\nDocuments must be clear."}
+                      className="rounded-xl border-border/60 focus-visible:ring-blue-400/30 min-h-[80px] text-sm bg-card resize-none"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Instructions (Hindi) (One per line)</Label>
                     <Textarea
-                      placeholder="जैसे कृपया जमा करने से पहले वर्तनी की जांच करें।&#10;दस्तावेज स्पष्ट होने चाहिए।"
                       value={serviceInfo.instructionsHindi}
                       onChange={(e) => setServiceInfo({ ...serviceInfo, instructionsHindi: e.target.value })}
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card font-semibold text-xs leading-normal"
+                      placeholder={"जैसे जमा करने से पहले जाँचें।\nदस्तावेज़ स्पष्ट होने चाहिए।"}
+                      className="rounded-xl border-orange-200/60 focus-visible:ring-orange-400/30 min-h-[80px] text-sm bg-card resize-none"
+                      dir="auto"
                     />
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Required Documents (English) (One per line)</Label>
+                {/* Required Documents */}
+                <div className="space-y-1.5">
+                  <Label className="text-xs font-bold text-foreground/80">
+                    Required Documents <span className="font-normal text-muted-foreground">(one per line)</span>
+                  </Label>
+                  <div className="grid grid-cols-2 gap-4">
                     <Textarea
-                      placeholder="e.g. Aadhar Card&#10;PAN Card"
                       value={serviceInfo.requiredDocuments}
                       onChange={(e) => setServiceInfo({ ...serviceInfo, requiredDocuments: e.target.value })}
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card font-semibold text-xs leading-normal"
+                      placeholder={"e.g. Aadhar Card\nPAN Card"}
+                      className="rounded-xl border-border/60 focus-visible:ring-blue-400/30 min-h-[80px] text-sm bg-card resize-none"
                     />
-                  </div>
-                  <div className="space-y-1.5">
-                    <Label className="text-xs font-bold text-foreground/80">Required Documents (Hindi) (One per line)</Label>
                     <Textarea
-                      placeholder="जैसे आधार कार्ड&#10;पैन कार्ड"
                       value={serviceInfo.requiredDocumentsHindi}
                       onChange={(e) => setServiceInfo({ ...serviceInfo, requiredDocumentsHindi: e.target.value })}
-                      className="rounded-xl border-border/60 focus-visible:ring-primary/20 min-h-[80px] text-sm bg-card font-semibold text-xs leading-normal"
+                      placeholder={"जैसे आधार कार्ड\nपैन कार्ड"}
+                      className="rounded-xl border-orange-200/60 focus-visible:ring-orange-400/30 min-h-[80px] text-sm bg-card resize-none"
+                      dir="auto"
                     />
                   </div>
                 </div>
+
               </CardContent>
             </Card>
           </div>
 
-          {/* Form Builder (Col Span 5) */}
+          {/* ── Right: Form Builder ──────────────────────────────────────── */}
           <div className="lg:col-span-5">
             <Card className="rounded-2xl border-border/50 shadow-sm bg-card">
-              <CardHeader className="flex flex-row items-center justify-between pb-3 border-b border-border/20">
-                <div>
-                  <CardTitle className="text-base font-bold">Form Builder</CardTitle>
-                  <CardDescription className="text-xs">Define the fields users need to fill out</CardDescription>
+              <CardHeader className="pb-4 border-b border-border/20">
+                <div className="flex items-center justify-between mb-1">
+                  <div>
+                    <CardTitle className="text-base font-bold">Form Builder</CardTitle>
+                    <CardDescription className="text-xs mt-0.5">Define fields users fill in both languages</CardDescription>
+                  </div>
+                  <Button variant="outline" onClick={addField} className="rounded-full px-5 text-xs font-bold h-9 transition-all gap-1.5">
+                    <Plus className="w-3.5 h-3.5" /> Add Field
+                  </Button>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={addField}
-                  className="rounded-full px-6 text-xs sm:text-sm font-semibold h-11 transition-all duration-200"
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Add Field
-                </Button>
+                {/* Column headers for form builder */}
+                <div className="grid grid-cols-2 gap-3 mt-2">
+                  <LangHeader lang="en" />
+                  <LangHeader lang="hi" />
+                </div>
               </CardHeader>
-              <CardContent className="pt-6 space-y-4 max-h-[600px] overflow-y-auto pr-1">
+
+              <CardContent className="pt-4 space-y-3 max-h-[660px] overflow-y-auto pr-1">
                 {fields.length === 0 ? (
                   <div className="text-center py-12 text-xs text-muted-foreground font-semibold">
-                    No custom fields added yet. Click 'Add Field' above.
+                    No fields yet — click &ldquo;Add Field&rdquo; above.
                   </div>
                 ) : (
                   fields.map((field, index) => (
-                    <div key={index} className="flex items-start gap-3 p-4 border border-border/40 rounded-2xl bg-secondary/20 relative group">
-                      <div className="mt-2.5 text-muted-foreground/60 cursor-move">
-                        <GripVertical className="w-3.5 h-3.5" />
+                    <div key={index} className="p-4 border border-border/40 rounded-2xl bg-secondary/20 space-y-3">
+
+                      {/* Drag handle + delete row */}
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-1.5 text-muted-foreground/50 cursor-move">
+                          <GripVertical className="w-3.5 h-3.5" />
+                          <span className="text-[10px] font-bold text-muted-foreground/60">Field {index + 1}</span>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => removeField(index)}
+                          className="text-destructive hover:bg-destructive/10 rounded-lg w-7 h-7 p-0"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </Button>
                       </div>
-                      <div className="flex-1 space-y-3 min-w-0">
+
+                      {/* Label EN + HI */}
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-foreground/70">Label</Label>
                         <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-foreground/70">Field Label (English)</Label>
-                            <Input 
-                              value={field.label}
-                              onChange={(e) => updateField(index, "label", e.target.value)}
-                              className="rounded-lg border-border/60 focus-visible:ring-primary/20 h-8 text-xs bg-card"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-foreground/70">Field Label (Hindi)</Label>
-                            <Input 
-                              value={field.labelHindi || ""}
-                              onChange={(e) => updateField(index, "labelHindi", e.target.value)}
-                              className="rounded-lg border-border/60 focus-visible:ring-primary/20 h-8 text-xs bg-card"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-foreground/70">Placeholder (English)</Label>
-                            <Input 
-                              value={field.placeholder || ""}
-                              onChange={(e) => updateField(index, "placeholder", e.target.value)}
-                              className="rounded-lg border-border/60 focus-visible:ring-primary/20 h-8 text-xs bg-card"
-                            />
-                          </div>
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-foreground/70">Placeholder (Hindi)</Label>
-                            <Input 
-                              value={field.placeholderHindi || ""}
-                              onChange={(e) => updateField(index, "placeholderHindi", e.target.value)}
-                              className="rounded-lg border-border/60 focus-visible:ring-primary/20 h-8 text-xs bg-card"
-                            />
-                          </div>
-                        </div>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="space-y-1">
-                            <Label className="text-[10px] font-bold text-foreground/70">Type</Label>
-                            <Select 
-                              value={field.type}
-                              onValueChange={(val) => updateField(index, "type", val)}
-                            >
-                              <SelectTrigger className="rounded-lg border-border/60 focus-visible:ring-primary/20 h-8 text-xs bg-card">
-                                <SelectValue />
-                              </SelectTrigger>
-                              <SelectContent className="rounded-xl border-border/60 bg-card">
-                                <SelectItem value="text" className="rounded-lg text-xs py-1">Text</SelectItem>
-                                <SelectItem value="textarea" className="rounded-lg text-xs py-1">Long Text</SelectItem>
-                                <SelectItem value="number" className="rounded-lg text-xs py-1">Number</SelectItem>
-                                <SelectItem value="email" className="rounded-lg text-xs py-1">Email</SelectItem>
-                                <SelectItem value="date" className="rounded-lg text-xs py-1">Date</SelectItem>
-                                <SelectItem value="select" className="rounded-lg text-xs py-1">Dropdown</SelectItem>
-                                <SelectItem value="file" className="rounded-lg text-xs py-1">File Upload</SelectItem>
-                                <SelectItem value="image" className="rounded-lg text-xs py-1">Image Upload</SelectItem>
-                                <SelectItem value="pdf" className="rounded-lg text-xs py-1">PDF Upload</SelectItem>
-                              </SelectContent>
-                            </Select>
-                          </div>
-                          <div className="flex items-center space-x-2 pt-6 pl-1">
-                            <input 
-                              type="checkbox"
-                              checked={field.required}
-                              onChange={(e) => updateField(index, "required", e.target.checked)}
-                              id={`req-${index}`}
-                              className="w-3.5 h-3.5 rounded border-border/60 accent-primary cursor-pointer"
-                            />
-                            <Label htmlFor={`req-${index}`} className="text-[10px] font-bold text-foreground/70 cursor-pointer select-none">Required</Label>
-                          </div>
+                          <Input
+                            value={field.label}
+                            onChange={(e) => updateField(index, "label", e.target.value)}
+                            placeholder="e.g. Full Name"
+                            className="rounded-lg border-border/60 focus-visible:ring-blue-400/30 h-9 text-xs bg-card"
+                          />
+                          <Input
+                            value={field.labelHindi || ""}
+                            onChange={(e) => updateField(index, "labelHindi", e.target.value)}
+                            placeholder="जैसे पूरा नाम"
+                            className="rounded-lg border-orange-200/60 focus-visible:ring-orange-400/30 h-9 text-xs bg-card"
+                            dir="auto"
+                          />
                         </div>
                       </div>
-                      
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={() => removeField(index)}
-                        className="text-destructive hover:text-destructive hover:bg-destructive/10 rounded-lg w-7 h-7 p-0 ml-1 mt-1"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </Button>
+
+                      {/* Placeholder EN + HI */}
+                      <div className="space-y-1">
+                        <Label className="text-[10px] font-bold text-foreground/70">Placeholder</Label>
+                        <div className="grid grid-cols-2 gap-2">
+                          <Input
+                            value={field.placeholder || ""}
+                            onChange={(e) => updateField(index, "placeholder", e.target.value)}
+                            placeholder="e.g. Enter your name"
+                            className="rounded-lg border-border/60 focus-visible:ring-blue-400/30 h-9 text-xs bg-card"
+                          />
+                          <Input
+                            value={field.placeholderHindi || ""}
+                            onChange={(e) => updateField(index, "placeholderHindi", e.target.value)}
+                            placeholder="जैसे अपना नाम दर्ज करें"
+                            className="rounded-lg border-orange-200/60 focus-visible:ring-orange-400/30 h-9 text-xs bg-card"
+                            dir="auto"
+                          />
+                        </div>
+                      </div>
+
+                      {/* Type + Required */}
+                      <div className="flex items-center gap-3">
+                        <div className="flex-1 space-y-1">
+                          <Label className="text-[10px] font-bold text-foreground/70">Type</Label>
+                          <Select value={field.type} onValueChange={(val) => updateField(index, "type", val)}>
+                            <SelectTrigger className="rounded-lg border-border/60 h-9 text-xs bg-card">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="rounded-xl bg-card">
+                              <SelectItem value="text" className="text-xs">Text</SelectItem>
+                              <SelectItem value="textarea" className="text-xs">Long Text</SelectItem>
+                              <SelectItem value="number" className="text-xs">Number</SelectItem>
+                              <SelectItem value="email" className="text-xs">Email</SelectItem>
+                              <SelectItem value="date" className="text-xs">Date</SelectItem>
+                              <SelectItem value="select" className="text-xs">Dropdown</SelectItem>
+                              <SelectItem value="file" className="text-xs">File Upload</SelectItem>
+                              <SelectItem value="image" className="text-xs">Image Upload</SelectItem>
+                              <SelectItem value="pdf" className="text-xs">PDF Upload</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex items-center gap-2 pt-5">
+                          <input
+                            type="checkbox"
+                            checked={field.required}
+                            onChange={(e) => updateField(index, "required", e.target.checked)}
+                            id={`req-${index}`}
+                            className="w-3.5 h-3.5 rounded accent-primary cursor-pointer"
+                          />
+                          <Label htmlFor={`req-${index}`} className="text-[10px] font-bold text-foreground/70 cursor-pointer select-none whitespace-nowrap">
+                            Required
+                          </Label>
+                        </div>
+                      </div>
+
                     </div>
                   ))
                 )}
               </CardContent>
             </Card>
           </div>
+
         </div>
       </div>
     </div>

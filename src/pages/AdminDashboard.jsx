@@ -87,7 +87,8 @@ export default function AdminDashboard() {
   const [activeChatUserId, setActiveChatUserId] = useState(null);
   const [chatMessages, setChatMessages] = useState([]);
   const [adminNewMessage, setAdminNewMessage] = useState("");
-  const chatEndRef = useRef(null);
+  const chatContainerRef = useRef(null);
+  const prevActiveChatUserIdRef = useRef(null);
 
   const { data: chatUsers = [], refetch: refetchChatUsers } = useQuery({
     queryKey: ["chatUsers"],
@@ -99,7 +100,12 @@ export default function AdminDashboard() {
     if (!activeChatUserId) return;
     try {
       const data = await api.get(`/messages/${activeChatUserId}`);
-      setChatMessages(data);
+      setChatMessages((prevMessages) => {
+        const hasChanges = prevMessages.length !== data.length || 
+          prevMessages.some((msg, index) => msg._id !== data[index]?._id || msg.message !== data[index]?.message);
+        
+        return hasChanges ? data : prevMessages;
+      });
     } catch (err) {
       console.error("Error fetching messages for admin:", err);
     }
@@ -116,11 +122,29 @@ export default function AdminDashboard() {
     };
   }, [activeChatUserId]);
 
+  // Smart auto-scroll for Admin
   useEffect(() => {
-    if (chatEndRef.current) {
-      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const container = chatContainerRef.current;
+    if (!container || chatMessages.length === 0) return;
+
+    // Check if we switched chat threads
+    const userSwitched = activeChatUserId !== prevActiveChatUserIdRef.current;
+    prevActiveChatUserIdRef.current = activeChatUserId;
+
+    // Check if the last message was sent by the admin
+    const lastMessage = chatMessages[chatMessages.length - 1];
+    const sentByMe = lastMessage && lastMessage.senderRole === "admin";
+
+    // Check if the user is already near the bottom (within 20px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
+
+    // Scroll if chat user changed, admin sent the message, or scroll is already near the bottom
+    if (userSwitched || sentByMe || isNearBottom) {
+      setTimeout(() => {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }, 100);
     }
-  }, [chatMessages]);
+  }, [chatMessages.length, activeChatUserId]);
 
   const handleAdminSend = async (e) => {
     e.preventDefault();
@@ -415,14 +439,14 @@ export default function AdminDashboard() {
           </TabsContent>
           
           <TabsContent value="chats" className="space-y-6">
-            <div className="grid md:grid-cols-12 gap-6 h-[550px] border border-border/40 rounded-2xl overflow-hidden bg-card shadow-sm">
+            <div className="grid md:grid-cols-12 gap-6 h-[550px] max-h-[550px] border border-border/40 rounded-2xl overflow-hidden bg-card shadow-sm" style={{ height: '550px', maxHeight: '550px' }}>
               {/* Left sidebar: Chat Users */}
-              <div className="md:col-span-4 border-r border-border/40 flex flex-col h-full bg-slate-50/20 dark:bg-slate-950/20">
+              <div className="md:col-span-4 border-r border-border/40 flex flex-col h-full max-h-[550px] bg-slate-50/20 dark:bg-slate-950/20" style={{ height: '100%', maxHeight: '550px' }}>
                 <div className="p-4 border-b border-border/40 bg-card">
                   <h3 className="font-bold text-sm text-foreground">Customer Conversations</h3>
                   <p className="text-[10px] text-muted-foreground font-medium">Select a user to chat</p>
                 </div>
-                <div className="flex-1 overflow-y-auto divide-y divide-border/20">
+                <div className="flex-1 min-h-0 overflow-y-auto divide-y divide-border/20">
                   {chatUsers.length === 0 ? (
                     <div className="p-6 text-center text-xs text-muted-foreground font-semibold">
                       No active chats.
@@ -460,7 +484,7 @@ export default function AdminDashboard() {
               </div>
 
               {/* Right area: Chat conversation */}
-              <div className="md:col-span-8 flex flex-col h-full bg-card">
+              <div className="md:col-span-8 flex flex-col h-full max-h-[550px] bg-card" style={{ height: '100%', maxHeight: '550px' }}>
                 {activeChatUserId ? (
                   <>
                     {/* Header */}
@@ -481,7 +505,10 @@ export default function AdminDashboard() {
                     })()}
 
                     {/* Messages Body */}
-                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/5 dark:bg-slate-950/5">
+                    <div 
+                      ref={chatContainerRef}
+                      className="flex-1 min-h-0 overflow-y-auto p-4 space-y-4 bg-slate-50/5 dark:bg-slate-950/5"
+                    >
                       {chatMessages.map((msg) => {
                         if (msg.senderRole === "system") {
                           return (
@@ -523,7 +550,6 @@ export default function AdminDashboard() {
                           </div>
                         );
                       })}
-                      <div ref={chatEndRef} />
                     </div>
 
                     {/* Footer Input */}

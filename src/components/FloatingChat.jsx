@@ -11,9 +11,10 @@ export function FloatingChat() {
   const [newMessage, setNewMessage] = useState("");
   const [user, setUser] = useState(null);
   const [hasNewUpdate, setHasNewUpdate] = useState(false);
-  const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null);
   const { language } = useTranslation();
   const pollIntervalRef = useRef(null);
+  const prevIsOpenRef = useRef(false);
 
   useEffect(() => {
     // Check if user is logged in
@@ -56,15 +57,22 @@ export function FloatingChat() {
     try {
       const data = await api.get("/messages");
       
-      // If we got new messages and window was closed, indicate update
-      if (data.length > messages.length && !isOpen && messages.length > 0) {
-        const lastMsg = data[data.length - 1];
-        if (lastMsg.senderRole !== "customer") {
-          setHasNewUpdate(true);
+      setMessages((prevMessages) => {
+        const hasChanges = prevMessages.length !== data.length || 
+          prevMessages.some((msg, index) => msg._id !== data[index]?._id || msg.message !== data[index]?.message);
+
+        if (!hasChanges) return prevMessages;
+
+        // If we got new messages and window was closed, indicate update
+        if (data.length > prevMessages.length && !isOpen && prevMessages.length > 0) {
+          const lastMsg = data[data.length - 1];
+          if (lastMsg.senderRole !== "customer") {
+            setHasNewUpdate(true);
+          }
         }
-      }
-      
-      setMessages(data);
+
+        return data;
+      });
     } catch (err) {
       console.error("Error fetching chat messages:", err);
     }
@@ -92,12 +100,29 @@ export function FloatingChat() {
     };
   }, [user, messages.length, isOpen]);
 
-  // Scroll to bottom when messages list updates or when chat opens
+  // Smart auto-scroll to bottom when messages list updates or when chat opens
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth" });
+    const container = messagesContainerRef.current;
+    if (!container || messages.length === 0) return;
+
+    // Check if chat window was newly opened
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    prevIsOpenRef.current = isOpen;
+
+    // Check if the last message was sent by the customer
+    const lastMessage = messages[messages.length - 1];
+    const sentByMe = lastMessage && lastMessage.senderRole === "customer";
+
+    // Check if the user is already near the bottom (within 20px)
+    const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight <= 20;
+
+    // Scroll if chat was newly opened, user sent the message, or they are already at the bottom
+    if (justOpened || sentByMe || isNearBottom) {
+      setTimeout(() => {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }, 100);
     }
-  }, [messages, isOpen]);
+  }, [messages.length, isOpen]);
 
   const handleSend = async (e) => {
     e.preventDefault();
@@ -159,7 +184,10 @@ export function FloatingChat() {
           </div>
 
           {/* Chat Messages Body */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50 dark:bg-slate-900/10">
+          <div 
+            ref={messagesContainerRef}
+            className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3.5 bg-slate-50/50 dark:bg-slate-900/10"
+          >
             {messages.length === 0 ? (
               <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
                 <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/40 rounded-full flex items-center justify-center text-primary">
@@ -236,7 +264,6 @@ export function FloatingChat() {
                 );
               })
             )}
-            <div ref={messagesEndRef} />
           </div>
 
           {/* Message Input Footer */}

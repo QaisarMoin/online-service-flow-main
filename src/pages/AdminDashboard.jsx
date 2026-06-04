@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   Card,
@@ -25,7 +25,9 @@ import {
   Plus,
   Edit,
   Trash2,
-  MoreVertical
+  MoreVertical,
+  MessageSquare,
+  Send
 } from "lucide-react";
 import { StatusBadge } from "@/components/StatusBadge";
 import { Header } from "@/components/Header";
@@ -81,6 +83,63 @@ export default function AdminDashboard() {
     }
   });
 
+  // Chat State & Queries for Admin
+  const [activeChatUserId, setActiveChatUserId] = useState(null);
+  const [chatMessages, setChatMessages] = useState([]);
+  const [adminNewMessage, setAdminNewMessage] = useState("");
+  const chatEndRef = useRef(null);
+
+  const { data: chatUsers = [], refetch: refetchChatUsers } = useQuery({
+    queryKey: ["chatUsers"],
+    queryFn: () => api.get("/messages/users"),
+    refetchInterval: 5000, // Poll active users list every 5s
+  });
+
+  const fetchActiveChatMessages = async () => {
+    if (!activeChatUserId) return;
+    try {
+      const data = await api.get(`/messages/${activeChatUserId}`);
+      setChatMessages(data);
+    } catch (err) {
+      console.error("Error fetching messages for admin:", err);
+    }
+  };
+
+  useEffect(() => {
+    fetchActiveChatMessages();
+    let interval;
+    if (activeChatUserId) {
+      interval = setInterval(fetchActiveChatMessages, 3000); // Poll active thread messages every 3s
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [activeChatUserId]);
+
+  useEffect(() => {
+    if (chatEndRef.current) {
+      chatEndRef.current.scrollIntoView({ behavior: "smooth" });
+    }
+  }, [chatMessages]);
+
+  const handleAdminSend = async (e) => {
+    e.preventDefault();
+    if (!adminNewMessage.trim() || !activeChatUserId) return;
+
+    try {
+      const text = adminNewMessage;
+      setAdminNewMessage("");
+      const sentMsg = await api.post("/messages", {
+        message: text,
+        userId: activeChatUserId,
+      });
+      setChatMessages((prev) => [...prev, sentMsg]);
+      refetchChatUsers();
+    } catch (err) {
+      toast({ variant: "destructive", title: "Error", description: "Could not send message" });
+    }
+  };
+
   const filteredRequests = requests.filter((request) => {
     const customerName = request.customer?.name || "";
     const serviceTitle = request.service?.title || "";
@@ -103,7 +162,10 @@ export default function AdminDashboard() {
   const handleDownloadZip = (id) => {
     // Open the download link in a new tab
     const token = localStorage.getItem('token');
-    window.open(`https://online-service-flow-main.onrender.com/api/applications/${id}/download-zip?token=${token}`, '_blank');
+    const baseUrl = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1"
+      ? "http://localhost:5001/api"
+      : "https://online-service-flow-main.onrender.com/api";
+    window.open(`${baseUrl}/applications/${id}/download-zip?token=${token}`, '_blank');
   };
 
   if (isLoadingRequests || isLoadingServices) return <div className="p-8 text-center">Loading dashboard data...</div>;
@@ -179,6 +241,7 @@ export default function AdminDashboard() {
           <TabsList className="bg-secondary/60 border border-border/40 p-1 rounded-xl h-10.5">
             <TabsTrigger value="requests" className="rounded-lg px-4 text-xs font-semibold py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">Service Requests</TabsTrigger>
             <TabsTrigger value="services" className="rounded-lg px-4 text-xs font-semibold py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">Manage Services</TabsTrigger>
+            <TabsTrigger value="chats" className="rounded-lg px-4 text-xs font-semibold py-1.5 data-[state=active]:bg-card data-[state=active]:text-foreground data-[state=active]:shadow-sm">Customer Chats</TabsTrigger>
           </TabsList>
 
           <TabsContent value="requests" className="space-y-6">
@@ -348,6 +411,152 @@ export default function AdminDashboard() {
                   </Card>
                 ))
               )}
+            </div>
+          </TabsContent>
+          
+          <TabsContent value="chats" className="space-y-6">
+            <div className="grid md:grid-cols-12 gap-6 h-[550px] border border-border/40 rounded-2xl overflow-hidden bg-card shadow-sm">
+              {/* Left sidebar: Chat Users */}
+              <div className="md:col-span-4 border-r border-border/40 flex flex-col h-full bg-slate-50/20 dark:bg-slate-950/20">
+                <div className="p-4 border-b border-border/40 bg-card">
+                  <h3 className="font-bold text-sm text-foreground">Customer Conversations</h3>
+                  <p className="text-[10px] text-muted-foreground font-medium">Select a user to chat</p>
+                </div>
+                <div className="flex-1 overflow-y-auto divide-y divide-border/20">
+                  {chatUsers.length === 0 ? (
+                    <div className="p-6 text-center text-xs text-muted-foreground font-semibold">
+                      No active chats.
+                    </div>
+                  ) : (
+                    chatUsers.map((chatUser) => {
+                      const isActive = activeChatUserId === chatUser._id;
+                      return (
+                        <button
+                          key={chatUser._id}
+                          onClick={() => setActiveChatUserId(chatUser._id)}
+                          className={`w-full text-left p-4 transition-colors flex flex-col gap-1.5 ${
+                            isActive
+                              ? "bg-primary/5 border-l-4 border-primary"
+                              : "hover:bg-secondary/40"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center w-full">
+                            <span className="font-bold text-xs text-foreground truncate max-w-[70%]">
+                              {chatUser.name}
+                            </span>
+                            <span className="text-[9px] text-muted-foreground font-mono">
+                              {new Date(chatUser.lastMessageTime).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                          </div>
+                          <div className="text-[11px] text-muted-foreground truncate w-full font-medium">
+                            {chatUser.lastSenderRole === "system" ? "📢 " : chatUser.lastSenderRole === "admin" ? "You: " : ""}
+                            {chatUser.lastMessage}
+                          </div>
+                        </button>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
+
+              {/* Right area: Chat conversation */}
+              <div className="md:col-span-8 flex flex-col h-full bg-card">
+                {activeChatUserId ? (
+                  <>
+                    {/* Header */}
+                    {(() => {
+                      const activeUser = chatUsers.find((u) => u._id === activeChatUserId);
+                      return (
+                        <div className="p-4 border-b border-border/40 bg-slate-50/30 dark:bg-slate-950/10 flex items-center justify-between">
+                          <div>
+                            <h3 className="font-bold text-xs sm:text-sm text-foreground leading-tight">
+                              {activeUser ? activeUser.name : "Customer"}
+                            </h3>
+                            <span className="text-[10px] text-muted-foreground font-semibold mt-1 block">
+                              Email: {activeUser?.email} | Phone: {activeUser?.phone || "N/A"}
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* Messages Body */}
+                    <div className="flex-1 overflow-y-auto p-4 space-y-4 bg-slate-50/5 dark:bg-slate-950/5">
+                      {chatMessages.map((msg) => {
+                        if (msg.senderRole === "system") {
+                          return (
+                            <div key={msg._id} className="flex justify-center">
+                              <div className="bg-blue-50/40 dark:bg-blue-950/20 border border-blue-100/30 dark:border-blue-900/20 rounded-xl px-3.5 py-2 max-w-[85%] text-[10px] text-blue-900 dark:text-blue-300 font-medium">
+                                📢 System: {msg.message}
+                                <span className="block text-[8px] text-muted-foreground/80 mt-1 font-mono">
+                                  {new Date(msg.createdAt).toLocaleTimeString()}
+                                </span>
+                              </div>
+                            </div>
+                          );
+                        }
+
+                        const isAdminMsg = msg.senderRole === "admin";
+                        return (
+                          <div
+                            key={msg._id}
+                            className={`flex ${isAdminMsg ? "justify-end" : "justify-start"}`}
+                          >
+                            <div className="flex flex-col max-w-[70%]">
+                              <div
+                                className={`rounded-2xl px-3.5 py-2.5 text-xs font-semibold shadow-[0_1px_3px_rgba(0,0,0,0.01)] ${
+                                  isAdminMsg
+                                    ? "bg-primary text-white rounded-br-none"
+                                    : "bg-secondary/70 border border-border/30 text-foreground rounded-bl-none"
+                                }`}
+                              >
+                                <p className="leading-relaxed whitespace-pre-wrap">{msg.message}</p>
+                              </div>
+                              <span
+                                className={`text-[8px] text-muted-foreground mt-1 font-mono ${
+                                  isAdminMsg ? "text-right" : "text-left"
+                                }`}
+                              >
+                                {new Date(msg.createdAt).toLocaleTimeString()}
+                              </span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      <div ref={chatEndRef} />
+                    </div>
+
+                    {/* Footer Input */}
+                    <form onSubmit={handleAdminSend} className="p-3 border-t border-border/40 flex items-center gap-2">
+                      <Input
+                        placeholder="Type your reply..."
+                        value={adminNewMessage}
+                        onChange={(e) => setAdminNewMessage(e.target.value)}
+                        className="flex-1 rounded-xl border-border/60 focus-visible:ring-primary/20 h-11 text-xs"
+                      />
+                      <Button
+                        type="submit"
+                        disabled={!adminNewMessage.trim()}
+                        className="bg-primary hover:bg-primary-hover text-white rounded-xl h-11 w-11 p-0 flex items-center justify-center shadow-sm"
+                      >
+                        <Send className="w-4 h-4" />
+                      </Button>
+                    </form>
+                  </>
+                ) : (
+                  <div className="h-full flex flex-col items-center justify-center text-center p-6 space-y-3">
+                    <div className="w-12 h-12 bg-blue-50 dark:bg-blue-950/40 rounded-full flex items-center justify-center text-primary">
+                      <MessageSquare className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="text-sm font-bold text-foreground mb-1">No Chat Selected</h4>
+                      <p className="text-xs text-muted-foreground leading-relaxed max-w-[240px] mx-auto">
+                        Click on a customer's thread from the left panel to view and send messages.
+                      </p>
+                    </div>
+                  </div>
+                )}
+              </div>
             </div>
           </TabsContent>
         </Tabs>

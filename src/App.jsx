@@ -15,6 +15,7 @@ import NotFound from "./pages/NotFound";
 
 import AdminLogin from "./pages/admin/AdminLogin";
 import ApplicationSuccess from "./pages/ApplicationSuccess";
+import { FloatingChat } from "./components/FloatingChat";
 
 const queryClient = new QueryClient();
 
@@ -38,6 +39,7 @@ const App = () => (
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>
+          <FloatingChat />
         </BrowserRouter>
       </TooltipProvider>
     </LanguageProvider>

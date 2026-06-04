@@ -27,6 +27,7 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 import userRoutes from './routes/userRoutes.js';
 import serviceRoutes from './routes/serviceRoutes.js';
 import applicationRoutes from './routes/applicationRoutes.js';
+import messageRoutes from './routes/messageRoutes.js';
 
 // ... middlewares ...
 
@@ -34,6 +35,7 @@ import applicationRoutes from './routes/applicationRoutes.js';
 app.use('/api/users', userRoutes);
 app.use('/api/services', serviceRoutes);
 app.use('/api/applications', applicationRoutes);
+app.use('/api/messages', messageRoutes);
 
 app.get('/', (req, res) => {
   res.send('API is running...');

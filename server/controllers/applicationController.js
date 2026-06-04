@@ -6,6 +6,7 @@ import http from 'http';
 import { URL } from 'url';
 import Request from '../models/Request.js';
 import Service from '../models/Service.js';
+import Message from '../models/Message.js';
 import cloudinary from '../config/cloudinary.js';
 import asyncHandler from '../middleware/asyncHandler.js';
 
@@ -134,6 +135,13 @@ const createApplication = asyncHandler(async (req, res) => {
     });
 
     if (request) {
+      // Create system message in chat
+      await Message.create({
+        userId: req.user._id,
+        senderRole: 'system',
+        message: `📋 Application submitted successfully for the service: "${service.title}". Status is "pending". Amount: ₹${amount || 0}.`,
+        isSystem: true,
+      });
       res.status(201).json(request);
     } else {
       res.status(400);
@@ -178,13 +186,32 @@ const getApplications = asyncHandler(async (req, res) => {
 // @access  Private/Admin
 const updateApplicationStatus = asyncHandler(async (req, res) => {
   const { status, remarks } = req.body;
-  const request = await Request.findById(req.params.id);
+  const request = await Request.findById(req.params.id).populate('service');
 
   if (request) {
+    const oldStatus = request.status;
     request.status = status || request.status;
     if (remarks) request.remarks.push(remarks);
 
     const updatedRequest = await request.save();
+
+    // Create system message in chat for user to see
+    if (status && oldStatus !== status) {
+      await Message.create({
+        userId: request.customer,
+        senderRole: 'system',
+        message: `📢 Status Update: Your application for "${request.service?.title || 'Service'}" status has been updated from "${oldStatus}" to "${status}".${remarks ? `\nRemarks: "${remarks}"` : ''}`,
+        isSystem: true,
+      });
+    } else if (remarks) {
+      await Message.create({
+        userId: request.customer,
+        senderRole: 'system',
+        message: `💬 Remarks added to your application for "${request.service?.title || 'Service'}": "${remarks}"`,
+        isSystem: true,
+      });
+    }
+
     res.json(updatedRequest);
   } else {
     res.status(404);
